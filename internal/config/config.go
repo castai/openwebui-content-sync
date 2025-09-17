@@ -116,6 +116,8 @@ func Load(path string) (*Config, error) {
 			ParentPageMappings: []ParentPageMapping{},
 			PageLimit:          100,
 			IncludeAttachments: true,
+			UseMarkdownParser:  false,
+			IncludeBlogPosts:   false,
 		},
 		LocalFolders: LocalFolderConfig{
 			Enabled:  false,
