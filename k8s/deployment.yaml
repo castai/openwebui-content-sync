@@ -29,11 +29,6 @@ spec:
             secretKeyRef:
               name: github-secrets
               key: token
-        - name: GITHUB_KNOWLEDGE_ID
-          valueFrom:
-            configMapKeyRef:
-              name: connector-config
-              key: knowledge-id
         - name: CONFLUENCE_API_KEY
           valueFrom:
             secretKeyRef:

@@ -10,5 +10,5 @@ import (
 type ManagerInterface interface {
 	SyncFiles(ctx context.Context, adapters []adapter.Adapter) error
 	SetKnowledgeID(knowledgeID string)
-	InitializeFileIndex(ctx context.Context) error
+	InitializeFileIndex(ctx context.Context, adapters []adapter.Adapter) error
 }

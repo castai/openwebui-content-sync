@@ -20,11 +20,13 @@ openwebui:
 github:
   enabled: true
   token: ""  # Set via GITHUB_TOKEN environment variable
-  repositories:
-    - "owner/repo1"  # Format: owner/repository
-    - "owner/repo2"
-    - "microsoft/vscode"  # Example: Microsoft's VS Code repository
-  knowledge_id: ""  # Set via GITHUB_KNOWLEDGE_ID environment variable
+  mappings:
+    - repository: "owner/repo1"
+      knowledge_id: "knowledge-base-1"
+    - repository: "owner/repo2" 
+      knowledge_id: "knowledge-base-2"
+    - repository: "microsoft/vscode"
+      knowledge_id: "vscode-knowledge-base"
 
 # Confluence adapter configuration
 confluence:
@@ -32,16 +34,36 @@ confluence:
   base_url: "https://your-domain.atlassian.net"  # Your Confluence instance URL
   username: "your-email@example.com"  # Your Confluence username (usually email)
   api_key: ""  # Set via CONFLUENCE_API_KEY environment variable
-  spaces:
-    - "SPACEKEY1"  # Confluence space keys to sync
-    - "SPACEKEY2"
-    - "DOCS"  # Example: Documentation space
-  parent_page_ids:  # Optional: specific parent page IDs to process sub-pages only
-    - ""  # Add multiple parent page IDs as needed
-    - ""  # Example: "3098214470", "1234567890"
-  knowledge_id: ""  # OpenWebUI knowledge base ID for Confluence content
+  
+  # Space mappings (per-space knowledge IDs)
+  space_mappings:
+    - space_key: "SPACEKEY1"
+      knowledge_id: "space1-knowledge-base"
+    - space_key: "SPACEKEY2"
+      knowledge_id: "space2-knowledge-base"
+    - space_key: "DOCS"
+      knowledge_id: "docs-knowledge-base"
+  
+  # Parent page mappings (per-parent-page knowledge IDs)
+  parent_page_mappings:
+    - parent_page_id: "3098214470"
+      knowledge_id: "parent-page-knowledge-base"
+    - parent_page_id: "1234567890"
+      knowledge_id: "another-parent-page-knowledge-base"
+  
   page_limit: 100  # Maximum pages to fetch per space (0 = no limit)
   include_attachments: true  # Whether to download and sync page attachments
+
+# Local Folders adapter configuration
+local_folders:
+  enabled: false
+  mappings:
+    - folder_path: "/path/to/docs"
+      knowledge_id: "docs-knowledge-base"
+    - folder_path: "/path/to/guides"
+      knowledge_id: "guides-knowledge-base"
+    - folder_path: "/path/to/notes"
+      knowledge_id: "notes-knowledge-base"
 
 # Example configurations for different environments:
 

@@ -10,12 +10,13 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	LogLevel   string           `yaml:"log_level"`
-	Schedule   ScheduleConfig   `yaml:"schedule"`
-	Storage    StorageConfig    `yaml:"storage"`
-	OpenWebUI  OpenWebUIConfig  `yaml:"openwebui"`
-	GitHub     GitHubConfig     `yaml:"github"`
-	Confluence ConfluenceConfig `yaml:"confluence"`
+	LogLevel     string            `yaml:"log_level"`
+	Schedule     ScheduleConfig    `yaml:"schedule"`
+	Storage      StorageConfig     `yaml:"storage"`
+	OpenWebUI    OpenWebUIConfig   `yaml:"openwebui"`
+	GitHub       GitHubConfig      `yaml:"github"`
+	Confluence   ConfluenceConfig  `yaml:"confluence"`
+	LocalFolders LocalFolderConfig `yaml:"local_folders"`
 }
 
 // ScheduleConfig defines the sync schedule
@@ -34,25 +35,53 @@ type OpenWebUIConfig struct {
 	APIKey  string `yaml:"api_key"`
 }
 
+// RepositoryMapping defines a mapping between a GitHub repository and a knowledge base
+type RepositoryMapping struct {
+	Repository  string `yaml:"repository"` // Format: "owner/repo"
+	KnowledgeID string `yaml:"knowledge_id"`
+}
+
+// SpaceMapping defines a mapping between a Confluence space and a knowledge base
+type SpaceMapping struct {
+	SpaceKey    string `yaml:"space_key"`
+	KnowledgeID string `yaml:"knowledge_id"`
+}
+
+// ParentPageMapping defines a mapping between a Confluence parent page and a knowledge base
+type ParentPageMapping struct {
+	ParentPageID string `yaml:"parent_page_id"`
+	KnowledgeID  string `yaml:"knowledge_id"`
+}
+
+// LocalFolderMapping defines a mapping between a local folder and a knowledge base
+type LocalFolderMapping struct {
+	FolderPath  string `yaml:"folder_path"`
+	KnowledgeID string `yaml:"knowledge_id"`
+}
+
 // GitHubConfig defines GitHub adapter settings
 type GitHubConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	Token        string   `yaml:"token"`
-	Repositories []string `yaml:"repositories"`
-	KnowledgeID  string   `yaml:"knowledge_id"`
+	Enabled  bool                `yaml:"enabled"`
+	Token    string              `yaml:"token"`
+	Mappings []RepositoryMapping `yaml:"mappings"` // Per-repository knowledge mappings
 }
 
 // ConfluenceConfig defines Confluence adapter settings
 type ConfluenceConfig struct {
-	Enabled            bool     `yaml:"enabled"`
-	BaseURL            string   `yaml:"base_url"`
-	Username           string   `yaml:"username"`
-	APIKey             string   `yaml:"api_key"`
-	Spaces             []string `yaml:"spaces"`
-	ParentPageIDs      []string `yaml:"parent_page_ids"` // Optional: specific parent pages to process sub-pages
-	KnowledgeID        string   `yaml:"knowledge_id"`
-	PageLimit          int      `yaml:"page_limit"`
-	IncludeAttachments bool     `yaml:"include_attachments"`
+	Enabled            bool                `yaml:"enabled"`
+	BaseURL            string              `yaml:"base_url"`
+	Username           string              `yaml:"username"`
+	APIKey             string              `yaml:"api_key"`
+	SpaceMappings      []SpaceMapping      `yaml:"space_mappings"`       // Per-space knowledge mappings
+	ParentPageMappings []ParentPageMapping `yaml:"parent_page_mappings"` // Per-parent-page knowledge mappings
+	PageLimit          int                 `yaml:"page_limit"`
+	IncludeAttachments bool                `yaml:"include_attachments"`
+}
+
+// LocalFolderConfig defines local folder adapter settings
+type LocalFolderConfig struct {
+	Enabled  bool                 `yaml:"enabled"`
+	Mappings []LocalFolderMapping `yaml:"mappings"` // Per-folder knowledge mappings
 }
 
 // Load loads configuration from file and environment variables
@@ -72,21 +101,23 @@ func Load(path string) (*Config, error) {
 			APIKey:  getEnv("OPENWEBUI_API_KEY", ""),
 		},
 		GitHub: GitHubConfig{
-			Enabled:      false,
-			Token:        getEnv("GITHUB_TOKEN", ""),
-			Repositories: []string{},
-			KnowledgeID:  getEnv("GITHUB_KNOWLEDGE_ID", ""),
+			Enabled:  false,
+			Token:    getEnv("GITHUB_TOKEN", ""),
+			Mappings: []RepositoryMapping{},
 		},
 		Confluence: ConfluenceConfig{
 			Enabled:            false,
 			BaseURL:            "",
 			Username:           "",
 			APIKey:             getEnv("CONFLUENCE_API_KEY", ""),
-			Spaces:             []string{},
-			ParentPageIDs:      []string{},
-			KnowledgeID:        "",
+			SpaceMappings:      []SpaceMapping{},
+			ParentPageMappings: []ParentPageMapping{},
 			PageLimit:          100,
 			IncludeAttachments: true,
+		},
+		LocalFolders: LocalFolderConfig{
+			Enabled:  false,
+			Mappings: []LocalFolderMapping{},
 		},
 	}
 
@@ -121,7 +152,6 @@ func Load(path string) (*Config, error) {
 	cfg.OpenWebUI.BaseURL = getEnv("OPENWEBUI_BASE_URL", cfg.OpenWebUI.BaseURL)
 	cfg.OpenWebUI.APIKey = getEnv("OPENWEBUI_API_KEY", cfg.OpenWebUI.APIKey)
 	cfg.GitHub.Token = getEnv("GITHUB_TOKEN", cfg.GitHub.Token)
-	cfg.GitHub.KnowledgeID = getEnv("GITHUB_KNOWLEDGE_ID", cfg.GitHub.KnowledgeID)
 	cfg.Confluence.APIKey = getEnv("CONFLUENCE_API_KEY", cfg.Confluence.APIKey)
 	cfg.Storage.Path = getEnv("STORAGE_PATH", cfg.Storage.Path)
 

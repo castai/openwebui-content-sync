@@ -34,32 +34,38 @@ func TestNewGitHubAdapter(t *testing.T) {
 		{
 			name: "valid config",
 			config: config.GitHubConfig{
-				Token:        "test-token",
-				Repositories: []string{"owner/repo"},
+				Token: "test-token",
+				Mappings: []config.RepositoryMapping{
+					{Repository: "owner/repo", KnowledgeID: "knowledge-id"},
+				},
 			},
 			expectError: false,
 		},
 		{
 			name: "missing token",
 			config: config.GitHubConfig{
-				Token:        "",
-				Repositories: []string{"owner/repo"},
+				Token: "",
+				Mappings: []config.RepositoryMapping{
+					{Repository: "owner/repo", KnowledgeID: "knowledge-id"},
+				},
 			},
 			expectError: true,
 		},
 		{
-			name: "no repositories",
+			name: "no mappings",
 			config: config.GitHubConfig{
-				Token:        "test-token",
-				Repositories: []string{},
+				Token:    "test-token",
+				Mappings: []config.RepositoryMapping{},
 			},
 			expectError: true,
 		},
 		{
 			name: "invalid repository format",
 			config: config.GitHubConfig{
-				Token:        "test-token",
-				Repositories: []string{"invalid-repo"},
+				Token: "test-token",
+				Mappings: []config.RepositoryMapping{
+					{Repository: "invalid-repo", KnowledgeID: "knowledge-id"},
+				},
 			},
 			expectError: false, // This will fail later during fetch
 		},
@@ -133,8 +139,10 @@ func TestGitHubAdapter_FetchFiles(t *testing.T) {
 	// This test would require mocking the GitHub API
 	// For now, we'll test the error cases
 	config := config.GitHubConfig{
-		Token:        "invalid-token",
-		Repositories: []string{"nonexistent/owner"},
+		Token: "invalid-token",
+		Mappings: []config.RepositoryMapping{
+			{Repository: "nonexistent/owner", KnowledgeID: "knowledge-id"},
+		},
 	}
 
 	adapter, err := NewGitHubAdapter(config)

@@ -72,27 +72,23 @@ func main() {
 		adapters = append(adapters, confluenceAdapter)
 	}
 
+	// Add Local Folders adapter if configured
+	if cfg.LocalFolders.Enabled {
+		localAdapter, err := adapter.NewLocalFolderAdapter(cfg.LocalFolders)
+		if err != nil {
+			logrus.Fatalf("Failed to create Local Folders adapter: %v", err)
+		}
+		adapters = append(adapters, localAdapter)
+	}
+
 	// Initialize sync manager
 	syncManager, err := sync.NewManager(cfg.OpenWebUI, cfg.Storage)
 	if err != nil {
 		logrus.Fatalf("Failed to create sync manager: %v", err)
 	}
 
-	// Set knowledge ID if provided (prioritize GitHub, then Confluence)
-	knowledgeID := ""
-	if cfg.GitHub.KnowledgeID != "" {
-		knowledgeID = cfg.GitHub.KnowledgeID
-		logrus.Infof("Using GitHub knowledge ID: %s", knowledgeID)
-	} else if cfg.Confluence.KnowledgeID != "" {
-		knowledgeID = cfg.Confluence.KnowledgeID
-		logrus.Infof("Using Confluence knowledge ID: %s", knowledgeID)
-	}
-
-	if knowledgeID != "" {
-		syncManager.SetKnowledgeID(knowledgeID)
-	} else {
-		logrus.Warnf("No knowledge ID provided - files will be uploaded but not added to any knowledge base")
-	}
+	// Note: With the mapping system, individual files will have their own knowledge IDs
+	logrus.Infof("Using mapping-based knowledge ID assignment - files will use their individual knowledge IDs from mappings")
 
 	// Initialize scheduler
 	sched := scheduler.New(cfg.Schedule.Interval, adapters, syncManager)
@@ -118,7 +114,7 @@ func main() {
 
 	// Initialize file index from OpenWebUI
 	logrus.Info("Initializing file index from OpenWebUI...")
-	if err := syncManager.InitializeFileIndex(ctx); err != nil {
+	if err := syncManager.InitializeFileIndex(ctx, adapters); err != nil {
 		logrus.Errorf("Failed to initialize file index: %v", err)
 		// Continue even if initialization fails
 	}

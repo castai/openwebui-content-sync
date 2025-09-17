@@ -19,7 +19,9 @@ func TestNewConfluenceAdapter(t *testing.T) {
 				BaseURL:  "https://test.atlassian.net",
 				Username: "test@example.com",
 				APIKey:   "test-key",
-				Spaces:   []string{"TEST"},
+				SpaceMappings: []config.SpaceMapping{
+					{SpaceKey: "TEST", KnowledgeID: "knowledge-id"},
+				},
 			},
 			wantErr: false,
 		},
@@ -28,7 +30,9 @@ func TestNewConfluenceAdapter(t *testing.T) {
 			config: config.ConfluenceConfig{
 				Username: "test@example.com",
 				APIKey:   "test-key",
-				Spaces:   []string{"TEST"},
+				SpaceMappings: []config.SpaceMapping{
+					{SpaceKey: "TEST", KnowledgeID: "knowledge-id"},
+				},
 			},
 			wantErr: true,
 		},
@@ -37,7 +41,9 @@ func TestNewConfluenceAdapter(t *testing.T) {
 			config: config.ConfluenceConfig{
 				BaseURL: "https://test.atlassian.net",
 				APIKey:  "test-key",
-				Spaces:  []string{"TEST"},
+				SpaceMappings: []config.SpaceMapping{
+					{SpaceKey: "TEST", KnowledgeID: "knowledge-id"},
+				},
 			},
 			wantErr: true,
 		},
@@ -46,17 +52,19 @@ func TestNewConfluenceAdapter(t *testing.T) {
 			config: config.ConfluenceConfig{
 				BaseURL:  "https://test.atlassian.net",
 				Username: "test@example.com",
-				Spaces:   []string{"TEST"},
+				SpaceMappings: []config.SpaceMapping{
+					{SpaceKey: "TEST", KnowledgeID: "knowledge-id"},
+				},
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing spaces",
+			name: "missing mappings",
 			config: config.ConfluenceConfig{
-				BaseURL:  "https://test.atlassian.net",
-				Username: "test@example.com",
-				APIKey:   "test-key",
-				Spaces:   []string{},
+				BaseURL:       "https://test.atlassian.net",
+				Username:      "test@example.com",
+				APIKey:        "test-key",
+				SpaceMappings: []config.SpaceMapping{},
 			},
 			wantErr: true,
 		},
@@ -81,7 +89,9 @@ func TestConfluenceAdapter_Name(t *testing.T) {
 		BaseURL:  "https://test.atlassian.net",
 		Username: "test@example.com",
 		APIKey:   "test-key",
-		Spaces:   []string{"TEST"},
+		SpaceMappings: []config.SpaceMapping{
+			{SpaceKey: "TEST", KnowledgeID: "knowledge-id"},
+		},
 	}
 
 	adapter, err := NewConfluenceAdapter(config)
@@ -99,7 +109,9 @@ func TestConfluenceAdapter_GetSetLastSync(t *testing.T) {
 		BaseURL:  "https://test.atlassian.net",
 		Username: "test@example.com",
 		APIKey:   "test-key",
-		Spaces:   []string{"TEST"},
+		SpaceMappings: []config.SpaceMapping{
+			{SpaceKey: "TEST", KnowledgeID: "knowledge-id"},
+		},
 	}
 
 	adapter, err := NewConfluenceAdapter(config)

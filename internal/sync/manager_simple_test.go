@@ -90,7 +90,7 @@ func TestManager_syncFile_NewFile(t *testing.T) {
 	}
 
 	// Check that file was added to index
-	fileKey := "test-source:new-file.md"
+	fileKey := "new-file.md" // Now using filename as key
 	if _, exists := manager.fileIndex[fileKey]; !exists {
 		t.Errorf("Expected file to be added to index")
 	}
@@ -114,7 +114,7 @@ func TestManager_syncFile_UnchangedFile(t *testing.T) {
 	}
 
 	// Add file to index first
-	fileKey := "test-source:unchanged-file.md"
+	fileKey := "unchanged-file.md" // Now using filename as key
 	manager.fileIndex[fileKey] = &FileMetadata{
 		Path:     "unchanged-file.md",
 		Hash:     "same-hash",
@@ -205,7 +205,7 @@ func TestManager_loadFileIndex(t *testing.T) {
 
 	// Create a test index file
 	testIndex := map[string]*FileMetadata{
-		"test:file.md": {
+		"file.md": { // Now using filename as key
 			Path:     "file.md",
 			Hash:     "test-hash",
 			FileID:   "test-file-id",
@@ -238,7 +238,7 @@ func TestManager_loadFileIndex(t *testing.T) {
 		t.Errorf("Expected 1 file in index, got %d", len(newManager.fileIndex))
 	}
 
-	fileKey := "test:file.md"
+	fileKey := "file.md" // Now using filename as key
 	if _, exists := newManager.fileIndex[fileKey]; !exists {
 		t.Errorf("Expected file %s to be in index", fileKey)
 	}

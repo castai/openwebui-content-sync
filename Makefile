@@ -2,7 +2,7 @@
 
 # Build the application
 build:
-	go build -o content .
+	go build -o connector .
 
 # Run tests
 test:
@@ -10,7 +10,7 @@ test:
 
 # Clean build artifacts
 clean:
-	rm -f content
+	rm -f connector
 
 # Build Docker image (single platform)
 docker-build:

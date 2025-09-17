@@ -49,10 +49,11 @@ openwebui:
 github:
   enabled: true
   token: "custom-token"
-  repositories:
-    - "owner/repo1"
-    - "owner/repo2"
-  knowledge_id: "custom-knowledge-id"
+  mappings:
+    - repository: "owner/repo1"
+      knowledge_id: "custom-knowledge-id"
+    - repository: "owner/repo2"
+      knowledge_id: "custom-knowledge-id"
 `
 
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
@@ -87,11 +88,14 @@ github:
 	if cfg.GitHub.Token != "custom-token" {
 		t.Errorf("Expected GitHub token 'custom-token', got '%s'", cfg.GitHub.Token)
 	}
-	if len(cfg.GitHub.Repositories) != 2 {
-		t.Errorf("Expected 2 repositories, got %d", len(cfg.GitHub.Repositories))
+	if len(cfg.GitHub.Mappings) != 2 {
+		t.Errorf("Expected 2 repository mappings, got %d", len(cfg.GitHub.Mappings))
 	}
-	if cfg.GitHub.KnowledgeID != "custom-knowledge-id" {
-		t.Errorf("Expected GitHub knowledge ID 'custom-knowledge-id', got '%s'", cfg.GitHub.KnowledgeID)
+	if cfg.GitHub.Mappings[0].Repository != "owner/repo1" {
+		t.Errorf("Expected first repository 'owner/repo1', got '%s'", cfg.GitHub.Mappings[0].Repository)
+	}
+	if cfg.GitHub.Mappings[0].KnowledgeID != "custom-knowledge-id" {
+		t.Errorf("Expected first knowledge ID 'custom-knowledge-id', got '%s'", cfg.GitHub.Mappings[0].KnowledgeID)
 	}
 }
 
@@ -125,9 +129,7 @@ func TestLoad_EnvironmentOverride(t *testing.T) {
 	if cfg.GitHub.Token != "env-github-token" {
 		t.Errorf("Expected GitHub token 'env-github-token', got '%s'", cfg.GitHub.Token)
 	}
-	if cfg.GitHub.KnowledgeID != "env-knowledge-id" {
-		t.Errorf("Expected GitHub knowledge ID 'env-knowledge-id', got '%s'", cfg.GitHub.KnowledgeID)
-	}
+	// Note: GitHub knowledge ID is now handled via mappings, not environment variables
 	if cfg.Storage.Path != "/env/storage" {
 		t.Errorf("Expected storage path '/env/storage', got '%s'", cfg.Storage.Path)
 	}
@@ -242,10 +244,11 @@ func TestConfig_StructFields(t *testing.T) {
 			APIKey:  "test-key",
 		},
 		GitHub: GitHubConfig{
-			Enabled:      true,
-			Token:        "github-token",
-			Repositories: []string{"owner/repo"},
-			KnowledgeID:  "knowledge-id",
+			Enabled: true,
+			Token:   "github-token",
+			Mappings: []RepositoryMapping{
+				{Repository: "owner/repo", KnowledgeID: "knowledge-id"},
+			},
 		},
 	}
 
@@ -271,10 +274,13 @@ func TestConfig_StructFields(t *testing.T) {
 	if cfg.GitHub.Token != "github-token" {
 		t.Errorf("GitHub.Token not set correctly")
 	}
-	if len(cfg.GitHub.Repositories) != 1 {
-		t.Errorf("GitHub.Repositories not set correctly")
+	if len(cfg.GitHub.Mappings) != 1 {
+		t.Errorf("GitHub.Mappings not set correctly")
 	}
-	if cfg.GitHub.KnowledgeID != "knowledge-id" {
-		t.Errorf("GitHub.KnowledgeID not set correctly")
+	if cfg.GitHub.Mappings[0].Repository != "owner/repo" {
+		t.Errorf("GitHub.Mappings[0].Repository not set correctly")
+	}
+	if cfg.GitHub.Mappings[0].KnowledgeID != "knowledge-id" {
+		t.Errorf("GitHub.Mappings[0].KnowledgeID not set correctly")
 	}
 }

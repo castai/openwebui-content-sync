@@ -15,18 +15,31 @@ data:
       base_url: "http://open-webui:8080"
     github:
       enabled: true
-      repositories:
-        - "owner/repo1"
-        - "owner/repo2"
-      knowledge_id: "fbc18bc4-72c1-40f0-84b1-52055368c583"
+      token: ""
+      mappings:
+        - repository: "owner/repo1"
+          knowledge_id: "repo1-knowledge-base"
+        - repository: "owner/repo2"
+          knowledge_id: "repo2-knowledge-base"
     confluence:
       enabled: false
       base_url: "https://your-domain.atlassian.net"
       username: "your-email@example.com"
-      spaces:
-        - "SPACEKEY1"
-        - "SPACEKEY2"
-      parent_page_ids: []
-      knowledge_id: "fbc18bc4-72c1-40f0-84b1-52055368c583"
+      api_key: ""
+      space_mappings:
+        - space_key: "SPACEKEY1"
+          knowledge_id: "space1-knowledge-base"
+        - space_key: "SPACEKEY2"
+          knowledge_id: "space2-knowledge-base"
+      parent_page_mappings:
+        - parent_page_id: "1234567890"
+          knowledge_id: "parent-page-knowledge-base"
       page_limit: 100
       include_attachments: true
+    local_folders:
+      enabled: false
+      mappings:
+        - folder_path: "/data/docs"
+          knowledge_id: "docs-knowledge-base"
+        - folder_path: "/data/guides"
+          knowledge_id: "guides-knowledge-base"

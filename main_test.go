@@ -143,10 +143,11 @@ func createTestConfig() *config.Config {
 			APIKey:  "test-api-key",
 		},
 		GitHub: config.GitHubConfig{
-			Enabled:      false,
-			Token:        "test-token",
-			Repositories: []string{"owner/repo"},
-			KnowledgeID:  "test-knowledge-id",
+			Enabled: false,
+			Token:   "test-token",
+			Mappings: []config.RepositoryMapping{
+				{Repository: "owner/repo", KnowledgeID: "test-knowledge-id"},
+			},
 		},
 	}
 }

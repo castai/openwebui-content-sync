@@ -8,13 +8,14 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ## Features
 
-- **Multi-Source Support**: GitHub repositories and Confluence spaces
+- **Multi-Source Support**: GitHub repositories, Confluence spaces, and local folders
 - **Adapter Architecture**: Pluggable adapters for different data sources
 - **File Diffing**: Only syncs changed files based on content hashing
 - **Persistent Storage**: Uses Kubernetes persistent volumes for local file storage
 - **Scheduled Sync**: Configurable sync intervals using cron-like scheduling
 - **OpenWebUI Integration**: Full integration with OpenWebUI file and knowledge APIs
 - **Confluence Support**: Sync entire spaces or specific parent pages with sub-pages
+- **Local Folder Support**: Sync local directories with intelligent file filtering
 
 ## Architecture
 
@@ -23,6 +24,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 │   Data Sources  │    │   Content Sync   │    │   OpenWebUI     │
 │   • GitHub      │───▶│   Application    │───▶│   Knowledge     │
 │   • Confluence  │    │   (Adapters)     │    │   Base          │
+│   • Local Folders│   │                  │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                               │
                               ▼
@@ -98,22 +100,27 @@ go build -o connector .
 
 The GitHub adapter syncs files from GitHub repositories to OpenWebUI knowledge bases.
 
-#### Basic GitHub Configuration
+#### GitHub Configuration
+
+Map different repositories to different knowledge bases:
 
 ```yaml
 github:
   enabled: true
   token: "ghp_your_github_token_here"
-  repositories:
-    - "microsoft/vscode"
-    - "facebook/react"
-    - "your-org/your-repo"
-  knowledge_id: "your-knowledge-base-id"
+  mappings:
+    - repository: "microsoft/vscode"
+      knowledge_id: "vscode-knowledge-base"
+    - repository: "facebook/react"
+      knowledge_id: "react-knowledge-base"
+    - repository: "your-org/your-repo"
+      knowledge_id: "your-custom-knowledge-base"
 ```
 
 #### GitHub Features
 
 - **Repository Sync**: Syncs all files from specified repositories
+- **Multiple Knowledge Bases**: Map different repositories to different knowledge bases
 - **File Filtering**: Automatically filters out binary files and common ignore patterns
 - **Content Hashing**: Only syncs changed files based on SHA256 hashes
 - **Branch Support**: Syncs from the default branch (usually `main` or `master`)
@@ -133,7 +140,9 @@ INFO[0001] Successfully synced file: src/index.js
 
 The Confluence adapter syncs pages from Confluence spaces to OpenWebUI knowledge bases.
 
-#### Option 1: Sync Entire Space
+#### Confluence Configuration
+
+Map different spaces and parent pages to different knowledge bases:
 
 ```yaml
 confluence:
@@ -141,35 +150,30 @@ confluence:
   base_url: "https://your-domain.atlassian.net"
   username: "your-email@example.com"
   api_key: "your-confluence-api-key"
-  spaces:
-    - "DOCS"
-    - "ENGINEERING"
-  knowledge_id: "your-knowledge-base-id"
-  page_limit: 100
-  include_attachments: true
-```
-
-#### Option 2: Sync Specific Parent Page and Sub-pages
-
-```yaml
-confluence:
-  enabled: true
-  base_url: "https://your-domain.atlassian.net"
-  username: "your-email@example.com"
-  api_key: "your-confluence-api-key"
-  spaces: []  # Not needed when using parent_page_ids
-  parent_page_ids:  # Specific parent page IDs to process sub-pages
-    - "1234567890"
-    - "0987654321"  # Add multiple parent page IDs as needed
-  knowledge_id: "your-knowledge-base-id"
-  page_limit: 0  # No limit
-  include_attachments: false
+  
+  # Space mappings (per-space knowledge IDs)
+  space_mappings:
+    - space_key: "DOCS"
+      knowledge_id: "docs-knowledge-base"
+    - space_key: "PRODUCT"
+      knowledge_id: "product-knowledge-base"
+  
+  # Parent page mappings (per-parent-page knowledge IDs)
+  parent_page_mappings:
+    - parent_page_id: "1234567890"
+      knowledge_id: "parent-page-knowledge-base"
+    - parent_page_id: "0987654321"
+      knowledge_id: "another-parent-page-knowledge-base"
+  
+  page_limit: 100  # Maximum pages to fetch per space (0 = no limit)
+  include_attachments: true  # Whether to download and sync page attachments
 ```
 
 #### Confluence Features
 
 - **Space Sync**: Sync all pages from specified Confluence spaces
 - **Parent Page Sync**: Sync specific parent pages and all their sub-pages
+- **Multiple Knowledge Bases**: Map different spaces and parent pages to different knowledge bases
 - **Multiple Parent Pages**: Support for multiple parent page IDs in a single configuration
 - **Mixed Configuration**: Can sync both entire spaces and specific parent pages simultaneously
 - **HTML to Text**: Converts Confluence HTML content to plain text
@@ -193,6 +197,19 @@ INFO[0001] Successfully synced file: api_endpoints_reference.txt
 INFO[0001] Successfully synced file: authentication_guide.txt
 ```
 
+#### Benefits of Multiple Knowledge Mappings
+
+- **Organized Content**: Keep different types of content in separate knowledge bases
+- **Targeted Search**: Users can search within specific knowledge bases for more relevant results
+- **Access Control**: Different knowledge bases can have different access permissions
+- **Content Management**: Easier to manage and update specific types of content
+- **Performance**: Smaller knowledge bases can provide faster search results
+
+**Example Use Cases:**
+- Map different GitHub repositories to different knowledge bases (e.g., frontend docs, backend docs, API docs)
+- Map different Confluence spaces to different knowledge bases (e.g., product docs, engineering docs, marketing docs)
+- Map specific parent pages to specialized knowledge bases (e.g., troubleshooting guides, user manuals, API references)
+
 #### Finding Confluence Page IDs
 
 To find a Confluence page ID:
@@ -210,9 +227,59 @@ Each uploaded file contains:
 [Page content converted from HTML to plain text]
 ```
 
+## Local Folders Adapter
+
+The Local Folders adapter allows you to sync files from local directories to OpenWebUI knowledge bases. This is useful for syncing documentation, notes, or other local content.
+
+### Local Folders Configuration
+
+Map different local folders to different knowledge bases:
+
+```yaml
+local_folders:
+  enabled: true
+  mappings:
+    - folder_path: "/path/to/docs"
+      knowledge_id: "docs-knowledge-base"
+    - folder_path: "/path/to/guides"
+      knowledge_id: "guides-knowledge-base"
+    - folder_path: "/path/to/notes"
+      knowledge_id: "notes-knowledge-base"
+```
+
+### Local Folders Features
+
+- **Recursive Sync**: Syncs all files from specified directories recursively
+- **Multiple Knowledge Bases**: Map different folders to different knowledge bases
+- **File Filtering**: Automatically filters out binary files and common ignore patterns
+- **Content Hashing**: Only syncs changed files based on SHA256 hashes
+- **Hidden File Filtering**: Ignores hidden files (starting with `.`)
+- **Binary File Detection**: Automatically skips binary files
+
+### Local Folders Example Output
+
+```
+INFO[0000] Syncing files from adapter: local
+DEBU[0000] Fetching files from local folder: /path/to/docs
+DEBU[0000] Found 15 files in folder /path/to/docs (knowledge_id: docs-knowledge-base)
+INFO[0001] Successfully synced file: README.md
+INFO[0001] Successfully synced file: installation.md
+INFO[0001] Successfully synced file: api-reference.md
+INFO[0001] Successfully synced file: subfolder/advanced-usage.md
+```
+
+### Ignored Files
+
+The local folders adapter automatically ignores:
+- Hidden files (starting with `.`)
+- Binary files (detected by content analysis)
+- Common system files: `Thumbs.db`, `.DS_Store`, `desktop.ini`
+- Common development files: `node_modules`, `__pycache__`, `.git`, etc.
+- Temporary files: `*.log`, `*.tmp`, `*.temp`, `*.swp`, `*.swo`
+
 ### Multi-Adapter Configuration
 
-You can run both GitHub and Confluence adapters simultaneously:
+You can run GitHub, Confluence, and Local Folders adapters simultaneously:
 
 ```yaml
 github:
@@ -231,6 +298,13 @@ confluence:
     - "1234567890"
     - "0987654321"
   knowledge_id: "confluence-knowledge-base"
+
+local_folders:
+  enabled: true
+  folders:
+    - "/path/to/local/docs"
+    - "/path/to/notes"
+  knowledge_id: "local-knowledge-base"
 ```
 
 ## Configuration

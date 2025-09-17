@@ -20,11 +20,13 @@ import (
 
 // ConfluenceAdapter implements the Adapter interface for Confluence spaces
 type ConfluenceAdapter struct {
-	client        *http.Client
-	config        config.ConfluenceConfig
-	lastSync      time.Time
-	spaces        []string
-	parentPageIDs []string
+	client             *http.Client
+	config             config.ConfluenceConfig
+	lastSync           time.Time
+	spaces             []string
+	parentPageIDs      []string
+	spaceMappings      map[string]string // space_key -> knowledge_id mapping
+	parentPageMappings map[string]string // parent_page_id -> knowledge_id mapping
 }
 
 // ConfluenceSpace represents a space from Confluence API
@@ -142,44 +144,45 @@ func NewConfluenceAdapter(cfg config.ConfluenceConfig) (*ConfluenceAdapter, erro
 		return nil, fmt.Errorf("confluence API key is required")
 	}
 
-	// Parse spaces and parent page IDs from config
-	spaces := cfg.Spaces
-	parentPageIDs := cfg.ParentPageIDs
+	// Build space and parent page mappings
+	spaceMappings := make(map[string]string)
+	parentPageMappings := make(map[string]string)
+	spaces := []string{}
+	parentPageIDs := []string{}
 
-	// If parent_page_ids are specified, spaces are not required
-	// If parent_page_ids are not specified, at least one space must be configured
-	if len(parentPageIDs) == 0 && len(spaces) == 0 {
-		return nil, fmt.Errorf("at least one confluence space or parent_page_id must be configured")
-	}
-
-	// Filter out empty spaces
-	var validSpaces []string
-	for _, space := range spaces {
-		if strings.TrimSpace(space) != "" {
-			validSpaces = append(validSpaces, space)
+	// Process space mappings
+	for _, mapping := range cfg.SpaceMappings {
+		if mapping.SpaceKey != "" && mapping.KnowledgeID != "" {
+			spaceMappings[mapping.SpaceKey] = mapping.KnowledgeID
+			spaces = append(spaces, mapping.SpaceKey)
 		}
 	}
-	spaces = validSpaces
 
-	// Filter out empty parent page IDs
-	var validParentPageIDs []string
-	for _, pageID := range parentPageIDs {
-		if strings.TrimSpace(pageID) != "" {
-			validParentPageIDs = append(validParentPageIDs, pageID)
+	// Process parent page mappings
+	for _, mapping := range cfg.ParentPageMappings {
+		if mapping.ParentPageID != "" && mapping.KnowledgeID != "" {
+			parentPageMappings[mapping.ParentPageID] = mapping.KnowledgeID
+			parentPageIDs = append(parentPageIDs, mapping.ParentPageID)
 		}
 	}
-	parentPageIDs = validParentPageIDs
+
+	// If no mappings are configured, return error
+	if len(spaces) == 0 && len(parentPageIDs) == 0 {
+		return nil, fmt.Errorf("at least one confluence space or parent page mapping must be configured")
+	}
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
 	return &ConfluenceAdapter{
-		client:        client,
-		config:        cfg,
-		spaces:        spaces,
-		parentPageIDs: parentPageIDs,
-		lastSync:      time.Now(),
+		client:             client,
+		config:             cfg,
+		spaces:             spaces,
+		parentPageIDs:      parentPageIDs,
+		spaceMappings:      spaceMappings,
+		parentPageMappings: parentPageMappings,
+		lastSync:           time.Now(),
 	}, nil
 }
 
@@ -223,8 +226,9 @@ func (c *ConfluenceAdapter) FetchFiles(ctx context.Context) ([]*File, error) {
 			logrus.Debugf("Found %d pages under parent page %s", len(pages), parentPage.Title)
 
 			// Step 3: Process each page
+			knowledgeID := c.parentPageMappings[parentPageID]
 			for _, page := range pages {
-				file, err := c.processPage(ctx, page)
+				file, err := c.processPage(ctx, page, knowledgeID)
 				if err != nil {
 					logrus.Errorf("Failed to process page %s: %v", page.Title, err)
 					continue
@@ -259,8 +263,9 @@ func (c *ConfluenceAdapter) FetchFiles(ctx context.Context) ([]*File, error) {
 			logrus.Debugf("Found %d pages in space %s", len(pages), spaceKey)
 
 			// Step 3: Process each page
+			knowledgeID := c.spaceMappings[spaceKey]
 			for _, page := range pages {
-				file, err := c.processPage(ctx, page)
+				file, err := c.processPage(ctx, page, knowledgeID)
 				if err != nil {
 					logrus.Errorf("Failed to process page %s: %v", page.Title, err)
 					continue
@@ -479,7 +484,7 @@ func (c *ConfluenceAdapter) fetchSubPages(ctx context.Context, parentPageID stri
 }
 
 // processPage processes a single page and returns a File
-func (c *ConfluenceAdapter) processPage(ctx context.Context, page ConfluencePage) (*File, error) {
+func (c *ConfluenceAdapter) processPage(ctx context.Context, page ConfluencePage, knowledgeID string) (*File, error) {
 	// Get the page body with content
 	pageBody, err := c.fetchPageBody(ctx, page.ID)
 	if err != nil {
@@ -507,12 +512,13 @@ func (c *ConfluenceAdapter) processPage(ctx context.Context, page ConfluencePage
 	contentHash := base64.StdEncoding.EncodeToString(hash[:])
 
 	return &File{
-		Path:     filename,
-		Content:  fileContent,
-		Hash:     contentHash,
-		Modified: c.lastSync,
-		Size:     int64(len(fileContent)),
-		Source:   "confluence",
+		Path:        filename,
+		Content:     fileContent,
+		Hash:        contentHash,
+		Modified:    c.lastSync,
+		Size:        int64(len(fileContent)),
+		Source:      "confluence",
+		KnowledgeID: knowledgeID,
 	}, nil
 }
 

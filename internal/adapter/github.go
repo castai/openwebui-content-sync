@@ -21,6 +21,7 @@ type GitHubAdapter struct {
 	config       config.GitHubConfig
 	lastSync     time.Time
 	repositories []string
+	mappings     map[string]string // repository -> knowledge_id mapping
 }
 
 // NewGitHubAdapter creates a new GitHub adapter
@@ -37,16 +38,27 @@ func NewGitHubAdapter(cfg config.GitHubConfig) (*GitHubAdapter, error) {
 
 	client := github.NewClient(tc)
 
-	// Parse repositories from config
-	repos := cfg.Repositories
+	// Build repository mappings
+	mappings := make(map[string]string)
+	repos := []string{}
+
+	// Process mappings
+	for _, mapping := range cfg.Mappings {
+		if mapping.Repository != "" && mapping.KnowledgeID != "" {
+			mappings[mapping.Repository] = mapping.KnowledgeID
+			repos = append(repos, mapping.Repository)
+		}
+	}
+
 	if len(repos) == 0 {
-		return nil, fmt.Errorf("at least one repository must be configured")
+		return nil, fmt.Errorf("at least one repository mapping must be configured")
 	}
 
 	return &GitHubAdapter{
 		client:       client,
 		config:       cfg,
 		repositories: repos,
+		mappings:     mappings,
 		lastSync:     time.Now().Add(-24 * time.Hour), // Default to 24 hours ago
 	}, nil
 }
@@ -62,11 +74,12 @@ func (g *GitHubAdapter) FetchFiles(ctx context.Context) ([]*File, error) {
 
 	for _, repo := range g.repositories {
 		logrus.Debugf("Fetching files from repository: %s", repo)
-		repoFiles, err := g.fetchRepositoryFiles(ctx, repo)
+		knowledgeID := g.mappings[repo]
+		repoFiles, err := g.fetchRepositoryFiles(ctx, repo, knowledgeID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch files from repository %s: %w", repo, err)
 		}
-		logrus.Debugf("Found %d files in repository %s", len(repoFiles), repo)
+		logrus.Debugf("Found %d files in repository %s (knowledge_id: %s)", len(repoFiles), repo, knowledgeID)
 		files = append(files, repoFiles...)
 	}
 
@@ -75,7 +88,7 @@ func (g *GitHubAdapter) FetchFiles(ctx context.Context) ([]*File, error) {
 }
 
 // fetchRepositoryFiles fetches files from a specific repository
-func (g *GitHubAdapter) fetchRepositoryFiles(ctx context.Context, repo string) ([]*File, error) {
+func (g *GitHubAdapter) fetchRepositoryFiles(ctx context.Context, repo string, knowledgeID string) ([]*File, error) {
 	parts := strings.Split(repo, "/")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid repository format, expected 'owner/repo'")
@@ -91,7 +104,7 @@ func (g *GitHubAdapter) fetchRepositoryFiles(ctx context.Context, repo string) (
 
 	var files []*File
 	for _, content := range contents {
-		fileList, err := g.processContent(ctx, owner, repoName, content, "")
+		fileList, err := g.processContent(ctx, owner, repoName, content, "", knowledgeID)
 		if err != nil {
 			continue // Skip files that can't be processed
 		}
@@ -104,7 +117,7 @@ func (g *GitHubAdapter) fetchRepositoryFiles(ctx context.Context, repo string) (
 }
 
 // processContent processes a GitHub content item recursively
-func (g *GitHubAdapter) processContent(ctx context.Context, owner, repo string, content *github.RepositoryContent, path string) ([]*File, error) {
+func (g *GitHubAdapter) processContent(ctx context.Context, owner, repo string, content *github.RepositoryContent, path string, knowledgeID string) ([]*File, error) {
 	if content == nil {
 		return nil, nil
 	}
@@ -128,12 +141,13 @@ func (g *GitHubAdapter) processContent(ctx context.Context, owner, repo string, 
 		hash := fmt.Sprintf("%x", sha256.Sum256(fileContent))
 
 		return []*File{{
-			Path:     currentPath,
-			Content:  fileContent,
-			Hash:     hash,
-			Modified: time.Now(), // GitHub API doesn't provide modification time for content
-			Size:     int64(len(fileContent)),
-			Source:   fmt.Sprintf("%s/%s", owner, repo),
+			Path:        currentPath,
+			Content:     fileContent,
+			Hash:        hash,
+			Modified:    time.Now(), // GitHub API doesn't provide modification time for content
+			Size:        int64(len(fileContent)),
+			Source:      fmt.Sprintf("%s/%s", owner, repo),
+			KnowledgeID: knowledgeID,
 		}}, nil
 	}
 
@@ -146,7 +160,7 @@ func (g *GitHubAdapter) processContent(ctx context.Context, owner, repo string, 
 
 		var allFiles []*File
 		for _, subContent := range contents {
-			files, err := g.processContent(ctx, owner, repo, subContent, currentPath)
+			files, err := g.processContent(ctx, owner, repo, subContent, currentPath, knowledgeID)
 			if err != nil {
 				continue
 			}

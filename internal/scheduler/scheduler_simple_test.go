@@ -21,7 +21,7 @@ func (m *MockSyncManager) SetKnowledgeID(knowledgeID string) {
 	// Mock implementation
 }
 
-func (m *MockSyncManager) InitializeFileIndex(ctx context.Context) error {
+func (m *MockSyncManager) InitializeFileIndex(ctx context.Context, adapters []adapter.Adapter) error {
 	// Mock implementation
 	return nil
 }
