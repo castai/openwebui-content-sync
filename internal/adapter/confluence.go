@@ -375,7 +375,13 @@ func (c *ConfluenceAdapter) fetchSpacePages(ctx context.Context, spaceID string)
 		if !ok {
 			break
 		}
+		// Check if nextURL doesn't start with https
+		if nextURL != "" && !strings.HasPrefix(nextURL, "https") {
+			// Prepend the base URL
+			nextURL = c.config.BaseURL + nextURL
+		}
 
+		url = nextURL
 		url = nextURL
 	}
 
@@ -396,7 +402,6 @@ func (c *ConfluenceAdapter) fetchPageByID(ctx context.Context, pageID string) (C
 	req.Header.Set("Accept", "application/json")
 
 	logrus.Debugf("Confluence page API URL: %s", url)
-
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return ConfluencePage{}, fmt.Errorf("failed to make request: %w", err)
