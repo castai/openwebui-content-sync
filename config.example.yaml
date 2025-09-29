@@ -65,6 +65,26 @@ local_folders:
     - folder_path: "/path/to/notes"
       knowledge_id: "notes-knowledge-base"
 
+# Slack adapter configuration
+slack:
+  enabled: false
+  token: ""  # Set via SLACK_TOKEN environment variable
+  channel_mappings:
+    - channel_id: "C1234567890"  # Slack channel ID
+      channel_name: "general"     # Channel name for display
+      knowledge_id: "general-knowledge-base"
+    - channel_id: "C0987654321"
+      channel_name: "dev-team"
+      knowledge_id: "dev-knowledge-base"
+    - channel_id: "C1122334455"
+      channel_name: "support"
+      knowledge_id: "support-knowledge-base"
+  days_to_fetch: 30        # Number of days to fetch messages (default: 30)
+  maintain_history: false  # Whether to maintain indefinite history or age off (default: false)
+  message_limit: 1000      # Max messages per channel per run (default: 1000)
+  include_threads: true    # Whether to include thread messages (default: true)
+  include_reactions: false # Whether to include reaction data (default: false)
+
 # Example configurations for different environments:
 
 # Development
