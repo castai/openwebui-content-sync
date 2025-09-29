@@ -17,6 +17,7 @@ type Config struct {
 	GitHub       GitHubConfig      `yaml:"github"`
 	Confluence   ConfluenceConfig  `yaml:"confluence"`
 	LocalFolders LocalFolderConfig `yaml:"local_folders"`
+	Slack        SlackConfig       `yaml:"slack"`
 }
 
 // ScheduleConfig defines the sync schedule
@@ -86,6 +87,25 @@ type LocalFolderConfig struct {
 	Mappings []LocalFolderMapping `yaml:"mappings"` // Per-folder knowledge mappings
 }
 
+// SlackConfig defines Slack adapter settings
+type SlackConfig struct {
+	Enabled          bool             `yaml:"enabled"`
+	Token            string           `yaml:"token"`
+	ChannelMappings  []ChannelMapping `yaml:"channel_mappings"`  // Per-channel knowledge mappings
+	DaysToFetch      int              `yaml:"days_to_fetch"`     // Number of days to fetch messages
+	MaintainHistory  bool             `yaml:"maintain_history"`  // Whether to maintain indefinite history or age off
+	MessageLimit     int              `yaml:"message_limit"`     // Max messages per channel per run
+	IncludeThreads   bool             `yaml:"include_threads"`   // Whether to include thread messages
+	IncludeReactions bool             `yaml:"include_reactions"` // Whether to include reaction data
+}
+
+// ChannelMapping defines mapping between Slack channels and knowledge bases
+type ChannelMapping struct {
+	ChannelID   string `yaml:"channel_id"`   // Slack channel ID
+	ChannelName string `yaml:"channel_name"` // Slack channel name (for display)
+	KnowledgeID string `yaml:"knowledge_id"` // Target knowledge base ID
+}
+
 // Load loads configuration from file and environment variables
 func Load(path string) (*Config, error) {
 	fmt.Printf("Loading configuration from: %s\n", path)
@@ -122,6 +142,16 @@ func Load(path string) (*Config, error) {
 		LocalFolders: LocalFolderConfig{
 			Enabled:  false,
 			Mappings: []LocalFolderMapping{},
+		},
+		Slack: SlackConfig{
+			Enabled:          false,
+			Token:            getEnv("SLACK_TOKEN", ""),
+			ChannelMappings:  []ChannelMapping{},
+			DaysToFetch:      30,
+			MaintainHistory:  false,
+			MessageLimit:     1000,
+			IncludeThreads:   true,
+			IncludeReactions: false,
 		},
 	}
 

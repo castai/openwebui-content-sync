@@ -34,6 +34,11 @@ spec:
             secretKeyRef:
               name: confluence-secrets
               key: api-key
+        - name: SLACK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: slack-secrets
+              key: token
         - name: STORAGE_PATH
           value: "/data"
         - name: LOG_LEVEL

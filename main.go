@@ -49,7 +49,7 @@ func main() {
 	}
 	logrus.SetLevel(level)
 
-	logrus.Info("Starting OpenWebUI GitHub Connector")
+	logrus.Info("Starting OpenWebUI Content Sync")
 
 	// Initialize adapters
 	adapters := make([]adapter.Adapter, 0)
@@ -79,6 +79,15 @@ func main() {
 			logrus.Fatalf("Failed to create Local Folders adapter: %v", err)
 		}
 		adapters = append(adapters, localAdapter)
+	}
+
+	// Add Slack adapter if configured
+	if cfg.Slack.Enabled {
+		slackAdapter, err := adapter.NewSlackAdapter(cfg.Slack, cfg.Storage.Path)
+		if err != nil {
+			logrus.Fatalf("Failed to create Slack adapter: %v", err)
+		}
+		adapters = append(adapters, slackAdapter)
 	}
 
 	// Initialize sync manager
