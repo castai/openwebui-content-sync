@@ -11,6 +11,8 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v4
+      - name: Lowercase repository name
+        run: echo "LOWER_REPO=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -30,5 +32,5 @@ jobs:
           platforms: linux/amd64
           registry: ghcr.io
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/${{ github.repository_owner.toLowerCase() }}/${{ github.repository_name.toLowerCase() }}:latest
+          tags: ghcr.io/${{ env.LOWER_REPO }}:latest
           cache-from: type=gha
