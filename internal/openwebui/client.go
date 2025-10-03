@@ -63,7 +63,7 @@ func NewClient(baseURL, apiKey string) *Client {
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 5 * time.Minute,
 		},
 	}
 }
@@ -127,7 +127,7 @@ func (c *Client) UploadFile(ctx context.Context, filename string, content []byte
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// logrus.Debugf("File upload response body: %s", string(body))
+	logrus.Debugf("File upload response body: %s", string(body))
 
 	// Parse response
 	var file File
@@ -137,7 +137,16 @@ func (c *Client) UploadFile(ctx context.Context, filename string, content []byte
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	logrus.Debugf("Successfully uploaded file: ID=%s, Filename=%s, Status=%t", file.ID, file.Filename, file.Status)
+	logrus.Debugf("Successfully uploaded file: ID=%s, Filename=%s, Status=%t, DataStatus=%s", file.ID, file.Filename, file.Status, file.Data.Status)
+
+	// Wait for file processing to complete if status is pending
+	if file.Data.Status == "pending" {
+		logrus.Debugf("File %s is pending processing, waiting for completion...", file.ID)
+		if err := c.waitForFileProcessing(ctx, file.ID); err != nil {
+			logrus.Warnf("File processing wait failed: %v, continuing anyway", err)
+		}
+	}
+
 	return &file, nil
 }
 
@@ -256,6 +265,127 @@ func (c *Client) AddFileToKnowledge(ctx context.Context, knowledgeID, fileID str
 	return nil
 }
 
+// waitForFileProcessing waits for a file to finish processing with adaptive polling
+// Uses exponential backoff to handle both quick and slow file ingestion
+func (c *Client) waitForFileProcessing(ctx context.Context, fileID string) error {
+	// Polling strategy:
+	// - First 5 attempts: 2s interval (handles quick files, 0-10s)
+	// - Next 5 attempts: 5s interval (handles medium files, 10-35s)
+	// - Next 10 attempts: 10s interval (handles slow files, 35-135s)
+	// - Next 15 attempts: 15s interval (handles very slow files, 135-360s)
+	// - Final 16 attempts: 20s interval (handles extremely slow files, 360-680s = 11.3 minutes)
+	// Total: ~51 attempts over ~11 minutes
+
+	pollIntervals := []struct {
+		attempts int
+		delay    time.Duration
+	}{
+		{attempts: 5, delay: 2 * time.Second},   // 0-10s
+		{attempts: 5, delay: 5 * time.Second},   // 10-35s
+		{attempts: 10, delay: 10 * time.Second}, // 35-135s
+		{attempts: 15, delay: 15 * time.Second}, // 135-360s
+		{attempts: 16, delay: 20 * time.Second}, // 360-680s (~11 minutes)
+	}
+
+	startTime := time.Now()
+	attempt := 0
+	totalAttempts := 0
+	for _, interval := range pollIntervals {
+		totalAttempts += interval.attempts
+	}
+
+	for _, interval := range pollIntervals {
+		for i := 0; i < interval.attempts; i++ {
+			attempt++
+			elapsed := time.Since(startTime)
+
+			// Check if context is cancelled
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("context cancelled while waiting for file processing after %v: %w", elapsed.Round(time.Second), ctx.Err())
+			default:
+			}
+
+			// Get file status
+			file, err := c.GetFile(ctx, fileID)
+			if err != nil {
+				logrus.Debugf("After %v: Failed to get file status: %v", elapsed.Round(time.Second), err)
+				time.Sleep(interval.delay)
+				continue
+			}
+
+			logrus.Debugf("After %v: File %s status: %s (checking every %v)",
+				elapsed.Round(time.Second), fileID, file.Data.Status, interval.delay)
+
+			// Check if file processing is complete
+			if file.Data.Status == "processed" || file.Data.Status == "completed" || file.Data.Status == "" {
+				logrus.Infof("File %s processing completed after %v", fileID, elapsed.Round(time.Second))
+				return nil
+			}
+
+			// If status is error, return immediately
+			if file.Data.Status == "error" || file.Data.Status == "failed" {
+				return fmt.Errorf("file processing failed with status: %s after %v", file.Data.Status, elapsed.Round(time.Second))
+			}
+
+			// Wait before next attempt
+			if attempt < totalAttempts {
+				logrus.Debugf("File still processing, waiting %v before retry...", interval.delay)
+
+				// Use context-aware sleep to allow cancellation
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("context cancelled during wait after %v: %w", elapsed.Round(time.Second), ctx.Err())
+				case <-time.After(interval.delay):
+					// Continue to next attempt
+				}
+			}
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	return fmt.Errorf("file processing timeout after %v", elapsed.Round(time.Second))
+}
+
+// GetFile retrieves a file by ID
+func (c *Client) GetFile(ctx context.Context, fileID string) (*File, error) {
+	url := fmt.Sprintf("%s/api/v1/files/%s", c.baseURL, fileID)
+
+	logrus.Debugf("Getting file: %s", fileID)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get file failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var file File
+	if err := json.Unmarshal(body, &file); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &file, nil
+}
+
 // RemoveFileFromKnowledge removes a file from a knowledge source
 func (c *Client) RemoveFileFromKnowledge(ctx context.Context, knowledgeID, fileID string) error {
 	url := fmt.Sprintf("%s/api/v1/knowledge/%s/file/remove", c.baseURL, knowledgeID)
@@ -284,6 +414,12 @@ func (c *Client) RemoveFileFromKnowledge(ctx context.Context, knowledgeID, fileI
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Consider 404 as success - file already doesn't exist in knowledge base
+	if resp.StatusCode == http.StatusNotFound {
+		logrus.Debugf("File %s not found in knowledge %s (already removed or doesn't exist)", fileID, knowledgeID)
+		return nil
+	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)

@@ -99,9 +99,6 @@ func (m *Manager) InitializeFileIndex(ctx context.Context, adapters []adapter.Ad
 
 	logrus.Info("Initializing file index from OpenWebUI knowledge bases...")
 
-	// Create a new file index to replace the existing one
-	newFileIndex := make(map[string]*FileMetadata)
-
 	// Initialize file index for each knowledge base
 	for knowledgeID := range knowledgeIDs {
 		logrus.Debugf("Initializing file index for knowledge base: %s", knowledgeID)
@@ -115,7 +112,7 @@ func (m *Manager) InitializeFileIndex(ctx context.Context, adapters []adapter.Ad
 
 		logrus.Debugf("Found %d existing files in knowledge source %s", len(files), knowledgeID)
 
-		// Add files to new index
+		// Add files to existing index (merge instead of replace)
 		for _, file := range files {
 			// Use filename as path if no path is available
 			filePath := file.Path
@@ -127,6 +124,23 @@ func (m *Manager) InitializeFileIndex(ctx context.Context, adapters []adapter.Ad
 			// This avoids the "unknown:filename" issue and makes it easier to match
 			// with files that will be synced from adapters
 			fileKey := filePath
+
+			// Check if we already have this file in the index (from previous syncs)
+			if existing, exists := m.fileIndex[fileKey]; exists {
+				// If we already have the file with a hash from an adapter, keep that hash
+				// Only update the file ID and knowledge ID if they're missing
+				if existing.Source != "openwebui" {
+					logrus.Debugf("File %s already in index from %s, keeping existing hash", fileKey, existing.Source)
+					// Update file ID and knowledge ID if they're missing
+					if existing.FileID == "" {
+						existing.FileID = file.ID
+					}
+					if existing.KnowledgeID == "" {
+						existing.KnowledgeID = knowledgeID
+					}
+					continue
+				}
+			}
 
 			// Use file ID as hash since OpenWebUI doesn't provide content hash
 			// This means we won't detect content changes, but we can track file existence
@@ -146,14 +160,12 @@ func (m *Manager) InitializeFileIndex(ctx context.Context, adapters []adapter.Ad
 				Modified:    time.Unix(file.UpdatedAt, 0),
 			}
 
-			newFileIndex[fileKey] = metadata
+			m.fileIndex[fileKey] = metadata
 			logrus.Debugf("Added existing file to index: %s (ID: %s, Hash: %s, Knowledge: %s)", filePath, file.ID, fileHash, knowledgeID)
 		}
 	}
 
-	// Replace the old file index with the new one
-	m.fileIndex = newFileIndex
-	logrus.Infof("File index initialized with %d existing files from %d knowledge bases", len(m.fileIndex), len(knowledgeIDs))
+	logrus.Infof("File index now contains %d files from %d knowledge bases", len(m.fileIndex), len(knowledgeIDs))
 
 	// Save the updated index
 	if err := m.saveFileIndex(); err != nil {
@@ -183,6 +195,14 @@ func (m *Manager) SyncFiles(ctx context.Context, adapters []adapter.Adapter) err
 	currentFiles := make(map[string]bool)
 
 	for _, adpt := range adapters {
+		// Check if context is cancelled before processing each adapter
+		select {
+		case <-ctx.Done():
+			logrus.Info("Sync cancelled, stopping file synchronization")
+			return ctx.Err()
+		default:
+		}
+
 		logrus.Infof("Syncing files from adapter: %s", adpt.Name())
 
 		files, err := adpt.FetchFiles(ctx)
@@ -194,6 +214,14 @@ func (m *Manager) SyncFiles(ctx context.Context, adapters []adapter.Adapter) err
 		logrus.Debugf("Fetched %d files from adapter %s", len(files), adpt.Name())
 
 		for _, file := range files {
+			// Check if context is cancelled before processing each file
+			select {
+			case <-ctx.Done():
+				logrus.Info("Sync cancelled, stopping file synchronization")
+				return ctx.Err()
+			default:
+			}
+
 			filename := filepath.Base(file.Path)
 			currentFiles[filename] = true // Track by filename to match OpenWebUI behavior
 
@@ -225,6 +253,12 @@ func (m *Manager) SyncFiles(ctx context.Context, adapters []adapter.Adapter) err
 func (m *Manager) syncFile(ctx context.Context, file *adapter.File, source string) error {
 	filename := filepath.Base(file.Path)
 
+	// Skip files with empty content as OpenWebUI rejects them
+	if len(file.Content) == 0 {
+		logrus.Warnf("Skipping file %s: content is empty", file.Path)
+		return nil
+	}
+
 	// Find existing file by multiple criteria
 	var existing *FileMetadata
 	var exists bool
@@ -248,12 +282,15 @@ func (m *Manager) syncFile(ctx context.Context, file *adapter.File, source strin
 	if exists {
 		logrus.Debugf("Found existing file %s by %s (existing: %s, new: %s)", filename, matchReason, existing.Path, file.Path)
 
-		// Check if it's the same content
-		if existing.Hash == file.Hash {
+		// Check if it's the same content (but only for files from the same source type)
+		// Files from "openwebui" have file IDs as hashes, not content hashes, so we can't compare them
+		if existing.Source != "openwebui" && existing.Hash == file.Hash {
 			logrus.Debugf("File %s unchanged, skipping", file.Path)
 			return nil
 		}
-		logrus.Infof("File %s has changed, updating", file.Path)
+		if existing.Source != "openwebui" && existing.Hash != file.Hash {
+			logrus.Infof("File %s has changed, updating", file.Path)
+		}
 	}
 
 	if exists {

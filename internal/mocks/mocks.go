@@ -11,6 +11,7 @@ import (
 // MockOpenWebUIClient is a mock implementation of OpenWebUI client
 type MockOpenWebUIClient struct {
 	UploadFileFunc              func(ctx context.Context, filename string, content []byte) (*openwebui.File, error)
+	GetFileFunc                 func(ctx context.Context, fileID string) (*openwebui.File, error)
 	ListKnowledgeFunc           func(ctx context.Context) ([]*openwebui.Knowledge, error)
 	AddFileToKnowledgeFunc      func(ctx context.Context, knowledgeID, fileID string) error
 	RemoveFileFromKnowledgeFunc func(ctx context.Context, knowledgeID, fileID string) error
@@ -48,6 +49,36 @@ func (m *MockOpenWebUIClient) UploadFile(ctx context.Context, filename string, c
 		Status:        true,
 		Path:          "/app/backend/data/uploads/mock-file-id_" + filename,
 		AccessControl: nil,
+	}, nil
+}
+
+// GetFile mocks the GetFile method
+func (m *MockOpenWebUIClient) GetFile(ctx context.Context, fileID string) (*openwebui.File, error) {
+	if m.GetFileFunc != nil {
+		return m.GetFileFunc(ctx, fileID)
+	}
+	return &openwebui.File{
+		ID:       fileID,
+		Filename: "mock-file.md",
+		UserID:   "test-user",
+		Hash:     "mock-hash",
+		Data: struct {
+			Status string `json:"status"`
+		}{
+			Status: "processed", // Default to processed status
+		},
+		Meta: struct {
+			Name        string                 `json:"name"`
+			ContentType string                 `json:"content_type"`
+			Size        int64                  `json:"size"`
+			Data        map[string]interface{} `json:"data"`
+		}{
+			Name:        "mock-file.md",
+			ContentType: "text/markdown",
+			Size:        100,
+			Data:        map[string]interface{}{},
+		},
+		Status: true,
 	}, nil
 }
 

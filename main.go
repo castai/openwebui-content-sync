@@ -121,20 +121,38 @@ func main() {
 
 	// Run initial sync
 	logrus.Info("Running initial sync...")
-	if err := sched.RunSync(); err != nil {
+	if err := sched.RunSyncWithContext(ctx); err != nil {
 		logrus.Errorf("Initial sync failed: %v", err)
 	}
 
 	// Wait for shutdown signal
 	<-sigChan
-	logrus.Info("Shutting down...")
+	logrus.Info("Shutting down gracefully... (press CTRL+C again to force)")
 	cancel()
 
-	// Stop health server
+	// Create a channel for forced shutdown
+	forceChan := make(chan os.Signal, 1)
+	signal.Notify(forceChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Stop health server with timeout
 	healthCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer healthCancel()
-	healthServer.Stop(healthCtx)
 
-	// Give some time for graceful shutdown
-	time.Sleep(5 * time.Second)
+	// Run shutdown in a goroutine so we can detect double CTRL+C
+	shutdownDone := make(chan bool, 1)
+	go func() {
+		healthServer.Stop(healthCtx)
+		// Give some time for graceful shutdown
+		time.Sleep(5 * time.Second)
+		shutdownDone <- true
+	}()
+
+	// Wait for either shutdown completion or forced termination
+	select {
+	case <-shutdownDone:
+		logrus.Info("Graceful shutdown completed")
+	case <-forceChan:
+		logrus.Warn("Force shutdown requested, exiting immediately")
+		os.Exit(1)
+	}
 }
