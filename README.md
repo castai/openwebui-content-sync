@@ -301,10 +301,9 @@ confluence:
 
 local_folders:
   enabled: true
-  folders:
-    - "/path/to/local/docs"
-    - "/path/to/notes"
-  knowledge_id: "local-knowledge-base"
+  mappings:
+    - folder_path: "/path/to/local/docs"
+      knowledge_id: "local-knowledge-base"
 ```
 
 ## Configuration
