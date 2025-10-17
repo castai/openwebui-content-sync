@@ -15,6 +15,7 @@ type MockOpenWebUIClient struct {
 	AddFileToKnowledgeFunc      func(ctx context.Context, knowledgeID, fileID string) error
 	RemoveFileFromKnowledgeFunc func(ctx context.Context, knowledgeID, fileID string) error
 	GetKnowledgeFilesFunc       func(ctx context.Context, knowledgeID string) ([]*openwebui.File, error)
+	DeleteFileFunc              func(ctx context.Context, fileID string) error
 }
 
 // UploadFile mocks the UploadFile method
@@ -121,6 +122,14 @@ func (m *MockOpenWebUIClient) GetKnowledgeFiles(ctx context.Context, knowledgeID
 			AccessControl: nil,
 		},
 	}, nil
+}
+
+// DeleteFile mocks the DeleteFile method
+func (m *MockOpenWebUIClient) DeleteFile(ctx context.Context, fileID string) error {
+	if m.DeleteFileFunc != nil {
+		return m.DeleteFileFunc(ctx, fileID)
+	}
+	return nil
 }
 
 // MockAdapter is a mock implementation of the Adapter interface

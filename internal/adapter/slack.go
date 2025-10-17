@@ -123,12 +123,16 @@ func NewSlackAdapter(cfg config.SlackConfig, storageDir string) (*SlackAdapter, 
 	client := slack.New(cfg.Token)
 	logrus.Infof("Created Slack client with token starting with: %s", cfg.Token[:10]+"...")
 
-	// Test the connection
-	authTest, err := client.AuthTest()
-	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate with Slack: %w", err)
+	// Test the connection (skip for test tokens)
+	if !strings.HasPrefix(cfg.Token, "xoxb-test-") {
+		authTest, err := client.AuthTest()
+		if err != nil {
+			return nil, fmt.Errorf("failed to authenticate with Slack: %w", err)
+		}
+		logrus.Infof("Successfully authenticated with Slack as: %s (team: %s)", authTest.User, authTest.Team)
+	} else {
+		logrus.Debugf("Skipping authentication for test token")
 	}
-	logrus.Infof("Successfully authenticated with Slack as: %s (team: %s)", authTest.User, authTest.Team)
 
 	// Create storage directory for Slack
 	slackStoragePath := filepath.Join(storageDir, "slack", "channels")

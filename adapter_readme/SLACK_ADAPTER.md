@@ -6,11 +6,16 @@ The Slack adapter allows you to sync messages from Slack channels into OpenWebUI
 
 - **Multi-channel support**: Sync from multiple Slack channels
 - **Knowledge base mapping**: Map each channel to a specific OpenWebUI knowledge base
+- **Regex pattern discovery**: Automatically discover and sync channels matching regex patterns
+- **Auto-join functionality**: Automatically join channels that match configured patterns
 - **Thread support**: Include or exclude thread messages
 - **Reaction data**: Optionally include emoji reactions
 - **Message filtering**: Control the number of messages and time range
 - **History management**: Choose between maintaining indefinite history or aging off old messages
 - **Incremental sync**: Only fetches new messages since the last sync
+- **Channel caching**: Improved performance with intelligent channel caching
+- **Retry logic**: Robust error handling with exponential backoff
+- **Join error logging**: Detailed logging of channel join failures
 
 ## Configuration
 
@@ -40,6 +45,16 @@ slack:
     - channel_id: "C1122334455"
       channel_name: "support"
       knowledge_id: "support-knowledge-base"
+  regex_patterns:
+    - pattern: "sales-.*-internal.*"           # Matches channels like sales-team-internal
+      knowledge_id: "sales-knowledge-base"
+      auto_join: true                          # Automatically join matching channels
+    - pattern: "dev-.*"                        # Matches channels like dev-frontend, dev-backend
+      knowledge_id: "dev-knowledge-base"
+      auto_join: false                         # Don't auto-join, just sync if already a member
+    - pattern: "support-.*"                    # Matches channels like support-tier1, support-tier2
+      knowledge_id: "support-knowledge-base"
+      auto_join: true
   days_to_fetch: 30        # Number of days to fetch messages (default: 30)
   maintain_history: false  # Whether to maintain indefinite history or age off (default: false)
   message_limit: 1000      # Max messages per channel per run (default: 1000)
@@ -53,7 +68,8 @@ slack:
 |--------|------|----------|---------|-------------|
 | `enabled` | boolean | Yes | `false` | Enable/disable the Slack adapter |
 | `token` | string | Yes | - | Slack bot token (set via `SLACK_TOKEN` env var) |
-| `channel_mappings` | array | Yes | `[]` | List of channel mappings |
+| `channel_mappings` | array | No | `[]` | List of explicit channel mappings |
+| `regex_patterns` | array | No | `[]` | List of regex patterns for auto-discovering channels |
 | `days_to_fetch` | integer | No | `30` | Number of days to fetch messages |
 | `maintain_history` | boolean | No | `false` | Whether to maintain indefinite history or age off |
 | `message_limit` | integer | No | `1000` | Max messages per channel per run |
@@ -69,6 +85,62 @@ Each mapping in the `channel_mappings` array should contain:
 | `channel_id` | string | Yes | Slack channel ID (starts with 'C') |
 | `channel_name` | string | Yes | Channel name for display purposes |
 | `knowledge_id` | string | Yes | Target OpenWebUI knowledge base ID |
+
+### Regex Pattern Discovery
+
+The `regex_patterns` feature allows you to automatically discover and sync channels that match specific patterns. This is useful for:
+
+- **Dynamic channel discovery**: Automatically find new channels that match your naming conventions
+- **Bulk channel management**: Sync multiple similar channels without manual configuration
+- **Auto-joining**: Automatically join channels that match patterns
+
+Each pattern in the `regex_patterns` array should contain:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `pattern` | string | Yes | Regex pattern to match channel names |
+| `knowledge_id` | string | Yes | Target OpenWebUI knowledge base ID for matching channels |
+| `auto_join` | boolean | No | Whether to automatically join matching channels (default: `false`) |
+
+#### Regex Pattern Examples
+
+```yaml
+regex_patterns:
+  # Match all sales internal channels
+  - pattern: "sales-.*-internal.*"
+    knowledge_id: "sales-knowledge-base"
+    auto_join: true
+  
+  # Match all development channels
+  - pattern: "dev-.*"
+    knowledge_id: "dev-knowledge-base"
+    auto_join: false
+  
+  # Match support channels
+  - pattern: "support-.*"
+    knowledge_id: "support-knowledge-base"
+    auto_join: true
+  
+  # Match project-specific channels
+  - pattern: "project-[a-zA-Z0-9]+-.*"
+    knowledge_id: "project-knowledge-base"
+    auto_join: true
+```
+
+#### How Regex Discovery Works
+
+1. **Channel Discovery**: The adapter fetches all channels the bot can access
+2. **Pattern Matching**: Each channel name is tested against configured regex patterns
+3. **Auto-joining**: If `auto_join: true`, the bot attempts to join matching channels
+4. **Sync Setup**: Matching channels are added to the sync list with the specified knowledge ID
+5. **Caching**: Channel lists are cached to improve performance and reduce API calls
+
+#### Important Notes
+
+- **Channel Access**: The bot can only discover channels it has access to
+- **Auto-join Limitations**: Some channels may not allow bots to join (e.g., private channels requiring invitation)
+- **Performance**: Regex discovery happens once per sync session and results are cached
+- **Error Handling**: Failed joins are logged to `data/slack/join_errors.log` for troubleshooting
 
 ## Slack Bot Setup
 
@@ -257,9 +329,14 @@ slack:
    - Ensure channels aren't empty or archived
 
 4. **Rate limit exceeded**
-   - The adapter automatically handles rate limits with backoff
+   - The adapter automatically handles rate limits with exponential backoff
    - Consider reducing sync frequency if this occurs frequently
    - Check if you're hitting Slack's API rate limits
+
+5. **Channel join failures**
+   - Check `data/slack/join_errors.log` for detailed join failure information
+   - Common issues: archived channels, permission restrictions, private channel access
+   - Verify bot permissions and channel settings
 
 ### Debug Logging
 
@@ -274,6 +351,16 @@ This will show:
 - Message fetching progress
 - API request/response details
 - Sync timing and statistics
+- Channel discovery and regex matching
+- Join attempts and results
+
+### Error Logging
+
+The adapter provides detailed error logging for troubleshooting:
+
+- **Join Errors**: `data/slack/join_errors.log` - Detailed log of channel join failures
+- **Channel Tracking**: `data/slack/channels/channel_tracking.txt` - Overview of all discovered channels and their status
+- **Debug Logs**: Console output with detailed processing information
 
 ## Security Considerations
 
@@ -317,6 +404,16 @@ slack:
     - channel_id: "C1122334455"
       channel_name: "support"
       knowledge_id: "support-knowledge"
+  regex_patterns:
+    - pattern: "sales-.*-internal.*"
+      knowledge_id: "sales-knowledge-base"
+      auto_join: true
+    - pattern: "dev-.*"
+      knowledge_id: "dev-knowledge-base"
+      auto_join: false
+    - pattern: "support-.*"
+      knowledge_id: "support-knowledge-base"
+      auto_join: true
   days_to_fetch: 30
   maintain_history: false
   message_limit: 1000
