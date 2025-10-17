@@ -37,7 +37,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	cronSpec := fmt.Sprintf("@every %v", s.interval)
 	_, err := s.cron.AddFunc(cronSpec, func() {
 		logrus.Info("Running scheduled sync")
-		if err := s.RunSync(); err != nil {
+		if err := s.RunSyncWithContext(ctx); err != nil {
 			logrus.Errorf("Scheduled sync failed: %v", err)
 		}
 	})
@@ -54,10 +54,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 	s.cron.Stop()
 }
 
-// RunSync runs a synchronization cycle
-func (s *Scheduler) RunSync() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+// RunSyncWithContext runs a synchronization cycle with the provided context
+func (s *Scheduler) RunSyncWithContext(ctx context.Context) error {
+	// Create a timeout context, but make it respect the parent context cancellation
+	syncCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 
-	return s.syncManager.SyncFiles(ctx, s.adapters)
+	return s.syncManager.SyncFiles(syncCtx, s.adapters)
 }
