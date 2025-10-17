@@ -4,7 +4,7 @@ A Kubernetes-native application that synchronizes content from various sources (
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License v2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Features
 
@@ -460,4 +460,4 @@ make docker-build-arm64
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License v2.0 - see the [LICENSE](LICENSE) file for details.
