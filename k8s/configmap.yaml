@@ -53,6 +53,16 @@ data:
         - channel_id: "C0987654321"
           channel_name: "dev-team"
           knowledge_id: "dev-knowledge-base"
+      regex_patterns:
+        - pattern: "^sales-.*-internal$"
+          knowledge_id: "sales-knowledge-base"
+          auto_join: true
+        - pattern: "^dev-.*"
+          knowledge_id: "dev-knowledge-base"
+          auto_join: true
+        - pattern: "^support-.*"
+          knowledge_id: "support-knowledge-base"
+          auto_join: false
       days_to_fetch: 30
       maintain_history: false
       message_limit: 1000

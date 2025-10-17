@@ -79,6 +79,20 @@ slack:
     - channel_id: "C1122334455"
       channel_name: "support"
       knowledge_id: "support-knowledge-base"
+  regex_patterns:
+    # Auto-discover and join channels matching regex patterns
+    - pattern: "^sales-.*-internal$"     # Matches channels like "sales-team-internal", "sales-west-internal"
+      knowledge_id: "sales-knowledge-base"
+      auto_join: true                    # Automatically join matching channels
+    - pattern: "^dev-.*"                # Matches channels like "dev-frontend", "dev-backend", "dev-ops"
+      knowledge_id: "dev-knowledge-base"
+      auto_join: true
+    - pattern: "^support-.*"             # Matches channels like "support-tier1", "support-escalation"
+      knowledge_id: "support-knowledge-base"
+      auto_join: false                   # Discover but don't auto-join (manual approval required)
+    - pattern: "^alert-.*"               # Matches channels like "alert-production", "alert-staging"
+      knowledge_id: "monitoring-knowledge-base"
+      auto_join: true
   days_to_fetch: 30        # Number of days to fetch messages (default: 30)
   maintain_history: false  # Whether to maintain indefinite history or age off (default: false)
   message_limit: 1000      # Max messages per channel per run (default: 1000)

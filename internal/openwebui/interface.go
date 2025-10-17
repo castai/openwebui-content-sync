@@ -11,4 +11,5 @@ type ClientInterface interface {
 	AddFileToKnowledge(ctx context.Context, knowledgeID, fileID string) error
 	RemoveFileFromKnowledge(ctx context.Context, knowledgeID, fileID string) error
 	GetKnowledgeFiles(ctx context.Context, knowledgeID string) ([]*File, error)
+	DeleteFile(ctx context.Context, fileID string) error
 }

@@ -92,6 +92,7 @@ type SlackConfig struct {
 	Enabled          bool             `yaml:"enabled"`
 	Token            string           `yaml:"token"`
 	ChannelMappings  []ChannelMapping `yaml:"channel_mappings"`  // Per-channel knowledge mappings
+	RegexPatterns    []RegexPattern   `yaml:"regex_patterns"`    // Regex patterns for auto-discovering channels
 	DaysToFetch      int              `yaml:"days_to_fetch"`     // Number of days to fetch messages
 	MaintainHistory  bool             `yaml:"maintain_history"`  // Whether to maintain indefinite history or age off
 	MessageLimit     int              `yaml:"message_limit"`     // Max messages per channel per run
@@ -104,6 +105,13 @@ type ChannelMapping struct {
 	ChannelID   string `yaml:"channel_id"`   // Slack channel ID
 	ChannelName string `yaml:"channel_name"` // Slack channel name (for display)
 	KnowledgeID string `yaml:"knowledge_id"` // Target knowledge base ID
+}
+
+// RegexPattern defines regex patterns for auto-discovering Slack channels
+type RegexPattern struct {
+	Pattern     string `yaml:"pattern"`      // Regex pattern to match channel names
+	KnowledgeID string `yaml:"knowledge_id"` // Target knowledge base ID for matching channels
+	AutoJoin    bool   `yaml:"auto_join"`    // Whether to automatically join matching channels
 }
 
 // Load loads configuration from file and environment variables

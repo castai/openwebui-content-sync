@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/openwebui-content-sync/internal/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -105,21 +106,37 @@ func (c *Client) UploadFile(ctx context.Context, filename string, content []byte
 		logrus.Debugf("No API key provided")
 	}
 
-	// Send request
+	// Send request with retry logic
 	logrus.Debugf("Sending file upload request...")
-	resp, err := c.client.Do(req)
+
+	var resp *http.Response
+	retryConfig := utils.DefaultRetryConfig()
+	retryConfig.BaseDelay = 2 * time.Second
+	retryConfig.MaxDelay = 30 * time.Second
+
+	err = utils.RetryWithBackoff(ctx, retryConfig, func() error {
+		var err error
+		resp, err = c.client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		logrus.Debugf("File upload response status: %d %s", resp.StatusCode, resp.Status)
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(resp.Body)
+			logrus.Errorf("File upload failed with status %d: %s", resp.StatusCode, string(body))
+			resp.Body.Close()
+			return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf("failed to upload file after retries: %w", err)
 	}
 	defer resp.Body.Close()
-
-	logrus.Debugf("File upload response status: %d %s", resp.StatusCode, resp.Status)
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		logrus.Errorf("File upload failed with status %d: %s", resp.StatusCode, string(body))
-		return nil, fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
-	}
 
 	// Read response body for debugging
 	body, err := io.ReadAll(resp.Body)
@@ -290,6 +307,41 @@ func (c *Client) RemoveFileFromKnowledge(ctx context.Context, knowledgeID, fileI
 		return fmt.Errorf("remove file from knowledge failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	return nil
+}
+
+// DeleteFile deletes a file from OpenWebUI
+func (c *Client) DeleteFile(ctx context.Context, fileID string) error {
+	url := fmt.Sprintf("%s/api/v1/files/%s", c.baseURL, fileID)
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	logrus.Debugf("Deleting file from OpenWebUI: fileID=%s", fileID)
+	logrus.Debugf("Delete URL: %s", url)
+	logrus.Debugf("Using API key for delete request")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	logrus.Debugf("File delete response status: %d %s", resp.StatusCode, resp.Status)
+
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		body, _ := io.ReadAll(resp.Body)
+		logrus.Debugf("File delete response body: %s", string(body))
+		return fmt.Errorf("file delete failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	logrus.Debugf("Successfully deleted file: %s", fileID)
 	return nil
 }
 

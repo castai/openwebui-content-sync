@@ -247,13 +247,6 @@ func (m *Manager) syncFile(ctx context.Context, file *adapter.File, source strin
 
 	if exists {
 		logrus.Debugf("Found existing file %s by %s (existing: %s, new: %s)", filename, matchReason, existing.Path, file.Path)
-
-		// Check if it's the same content
-		if existing.Hash == file.Hash {
-			logrus.Debugf("File %s unchanged, skipping", file.Path)
-			return nil
-		}
-		logrus.Infof("File %s has changed, updating", file.Path)
 	}
 
 	if exists {
@@ -270,22 +263,20 @@ func (m *Manager) syncFile(ctx context.Context, file *adapter.File, source strin
 
 		// If the file exists in the same knowledge base, check if it needs updating
 		if existingKnowledgeID == fileKnowledgeID {
-			// For files from OpenWebUI (source: "openwebui"), we can't compare content hashes
-			// since OpenWebUI doesn't provide them. We should always upload from adapters
-			// to ensure the content is up to date.
-			if existing.Source == "openwebui" {
-				logrus.Debugf("File %s exists in OpenWebUI knowledge %s, will upload to ensure content is up to date", file.Path, fileKnowledgeID)
-				// Continue with upload to ensure content is current
+			// For files from OpenWebUI (source: "openwebui"), or entries without a file ID,
+			// we should not skip on hash equality because remote state may have changed.
+			if existing.Source == "openwebui" || existing.FileID == "" {
+				logrus.Debugf("Existing entry came from OpenWebUI or missing file ID; proceeding to upload to ensure consistency")
 			} else {
-				// For files from adapters, compare content hashes
+				// For files we previously uploaded (adapter source), allow hash-based skip
 				if existing.Hash == file.Hash {
-					logrus.Debugf("File %s unchanged, skipping", file.Path)
+					logrus.Debugf("File %s unchanged (hash match for adapter source), skipping upload", file.Path)
 					return nil
 				}
 				logrus.Infof("File %s has changed, updating", file.Path)
 			}
 
-			// Remove old file from knowledge if knowledge ID is set
+			// Remove old file from knowledge and delete the file if knowledge ID is set
 			if fileKnowledgeID != "" && existing.FileID != "" {
 				logrus.Debugf("Removing old file %s from knowledge %s", existing.FileID, fileKnowledgeID)
 				if err := m.openwebuiClient.RemoveFileFromKnowledge(ctx, fileKnowledgeID, existing.FileID); err != nil {
@@ -293,6 +284,15 @@ func (m *Manager) syncFile(ctx context.Context, file *adapter.File, source strin
 					// Continue with upload even if removal fails
 				} else {
 					logrus.Debugf("Successfully removed old file from knowledge")
+				}
+
+				// Delete the actual file from OpenWebUI to prevent filename conflicts
+				logrus.Debugf("Deleting old file %s from OpenWebUI", existing.FileID)
+				if err := m.openwebuiClient.DeleteFile(ctx, existing.FileID); err != nil {
+					logrus.Warnf("Failed to delete old file from OpenWebUI: %v", err)
+					// Continue with upload even if deletion fails
+				} else {
+					logrus.Debugf("Successfully deleted old file from OpenWebUI")
 				}
 			}
 		} else {
