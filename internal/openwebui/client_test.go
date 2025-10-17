@@ -77,22 +77,56 @@ func TestClient_UploadFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			requestCount := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != "POST" {
-					t.Errorf("Expected POST method, got %s", r.Method)
-				}
-				if !strings.Contains(r.URL.Path, "/api/v1/files/") {
-					t.Errorf("Expected path to contain /api/v1/files/, got %s", r.URL.Path)
-				}
-				if r.Header.Get("Authorization") != "Bearer test-api-key" {
-					t.Errorf("Expected Authorization header, got %s", r.Header.Get("Authorization"))
-				}
+				requestCount++
+				t.Logf("Request %d: %s %s", requestCount, r.Method, r.URL.Path)
 
-				w.WriteHeader(tt.serverStatus)
-				if tt.serverStatus == http.StatusOK {
-					json.NewEncoder(w).Encode(tt.serverResponse)
+				// Handle POST requests for file uploads
+				if r.Method == "POST" && strings.Contains(r.URL.Path, "/api/v1/files/") {
+					if r.Header.Get("Authorization") != "Bearer test-api-key" {
+						t.Errorf("Expected Authorization header, got %s", r.Header.Get("Authorization"))
+					}
+					w.WriteHeader(tt.serverStatus)
+					if tt.serverStatus == http.StatusOK {
+						json.NewEncoder(w).Encode(tt.serverResponse)
+					} else {
+						w.Write([]byte("Server Error"))
+					}
+				} else if r.Method == "GET" && strings.Contains(r.URL.Path, "/api/v1/files/") {
+					// Handle GET requests for file polling (file processing status)
+					if r.Header.Get("Authorization") != "Bearer test-api-key" {
+						t.Errorf("Expected Authorization header, got %s", r.Header.Get("Authorization"))
+					}
+
+					// Extract file ID from path
+					pathParts := strings.Split(r.URL.Path, "/")
+					fileID := pathParts[len(pathParts)-1]
+
+					// Return file with "processed" status to complete polling quickly
+					fileResponse := map[string]interface{}{
+						"id":       fileID,
+						"filename": "test-file.md",
+						"user_id":  "test-user",
+						"hash":     "test-hash",
+						"data": map[string]interface{}{
+							"status": "processed",
+						},
+						"meta": map[string]interface{}{
+							"name":         "test-file.md",
+							"content_type": "text/markdown",
+							"size":         100,
+							"data":         map[string]interface{}{},
+						},
+						"status": true,
+					}
+
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(fileResponse)
 				} else {
-					w.Write([]byte("Server Error"))
+					// Handle other requests gracefully
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("OK"))
 				}
 			}))
 			defer server.Close()

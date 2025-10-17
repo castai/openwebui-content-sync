@@ -55,10 +55,11 @@ func TestScheduler_RunSync(t *testing.T) {
 
 	scheduler := New(1*time.Hour, adapters, syncManager)
 
-	// Test RunSync
-	err := scheduler.RunSync()
+	// Test RunSyncWithContext
+	ctx := context.Background()
+	err := scheduler.RunSyncWithContext(ctx)
 	if err != nil {
-		t.Errorf("RunSync failed: %v", err)
+		t.Errorf("RunSyncWithContext failed: %v", err)
 	}
 }
 
