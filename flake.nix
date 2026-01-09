@@ -29,7 +29,7 @@
             meta = with pkgs.lib; {
               description = "Sync content from GitHub, Confluence, Jira, Slack, and local folders to OpenWebUI";
               homepage = "https://github.com/castai/openwebui-content-sync";
-              license = licenses.gpl3Plus;
+              license = licenses.asl20;
               maintainers = [ ];
               mainProgram = "openwebui-content-sync";
             };
