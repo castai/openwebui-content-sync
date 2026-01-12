@@ -39,11 +39,24 @@ func (s *SlackAdapter) channelHasHistory(channelID string) bool {
 
 // SlackMessage represents a Slack message with metadata
 type SlackMessage struct {
+	Timestamp   string              `json:"timestamp"`
+	User        string              `json:"user"`
+	Text        string              `json:"text"`
+	Channel     string              `json:"channel"` // stores channel name
+	ThreadTS    string              `json:"thread_ts,omitempty"`
+	Reactions   []SlackReaction     `json:"reactions,omitempty"`
+	Files       []SlackFile         `json:"files,omitempty"`
+	Attachments []SlackAttachment   `json:"attachments,omitempty"`
+	Replies     []SlackMessageReply `json:"replies,omitempty"`
+}
+
+// SlackMessage represents a Slack message with metadata
+type SlackMessageReply struct {
 	Timestamp   string            `json:"timestamp"`
 	User        string            `json:"user"`
 	Text        string            `json:"text"`
-	Channel     string            `json:"channel"` // stores channel name
 	ThreadTS    string            `json:"thread_ts,omitempty"`
+	Channel     string            `json:"channel"` // stores channel name
 	Reactions   []SlackReaction   `json:"reactions,omitempty"`
 	Files       []SlackFile       `json:"files,omitempty"`
 	Attachments []SlackAttachment `json:"attachments,omitempty"`
@@ -522,12 +535,41 @@ func (s *SlackAdapter) fetchChannelMessages(ctx context.Context, channelID, chan
 				continue
 			}
 
-			slackMsg := s.convertSlackMessage(msg.Msg, channelName)
+			// Determine if this is a thread starter message
+			// A message is a thread starter if:
+			// - ThreadTimestamp is empty (regular message that might have replies)
+			// - OR ThreadTimestamp equals Timestamp (explicit thread starter)
+			// We should NOT fetch replies for messages that are replies themselves
+			// (ThreadTimestamp != "" && ThreadTimestamp != Timestamp)
+			var replies []slack.Msg
+			isThreadStarter := msg.Msg.ThreadTimestamp == "" || msg.Msg.ThreadTimestamp == msg.Msg.Timestamp
+			isReply := msg.Msg.ThreadTimestamp != "" && msg.Msg.ThreadTimestamp != msg.Msg.Timestamp
+
+			if isThreadStarter && !isReply {
+				// Fetch thread replies for thread starter messages
+				var err error
+				replies, err = s.fetchThreadReplies(ctx, channelID, msg.Msg.Timestamp)
+				if err != nil {
+					logrus.Warnf("Failed to fetch thread replies for message %s: %v", msg.Msg.Timestamp, err)
+					// Continue processing even if thread fetch fails
+					replies = []slack.Msg{}
+				} else {
+					logrus.Debugf("Fetched %d replies for thread starter message %s", len(replies), msg.Msg.Timestamp)
+				}
+
+				// Add a small delay to respect Slack rate limits
+				time.Sleep(100 * time.Millisecond)
+			} else if isReply {
+				// This is a reply message - skip fetching replies (it's already a reply)
+				logrus.Debugf("Skipping thread reply fetch for reply message %s (parent: %s)", msg.Msg.Timestamp, msg.Msg.ThreadTimestamp)
+			}
+
+			slackMsg := s.convertSlackMessage(msg.Msg, channelName, replies)
 			allMessages = append(allMessages, slackMsg)
 			newMessagesCount++
 
-			logrus.Debugf("Added message: timestamp=%s, user=%s, text_length=%d",
-				msg.Timestamp, msg.User, len(msg.Text))
+			logrus.Debugf("Added message: timestamp=%s, user=%s, text_length=%d, replies=%d",
+				msg.Timestamp, msg.User, len(msg.Text), len(replies))
 		}
 
 		logrus.Infof("Processed %d new messages from page %d for channel %s", newMessagesCount, pageCount, channelID)
@@ -554,8 +596,85 @@ func (s *SlackAdapter) fetchChannelMessages(ctx context.Context, channelID, chan
 	return allMessages, nil
 }
 
+// fetchThreadReplies retrieves replies to a specific thread
+func (s *SlackAdapter) fetchThreadReplies(ctx context.Context, channelID, threadTS string) ([]slack.Msg, error) {
+	// Check if threads are enabled
+	if !s.config.IncludeThreads {
+		return []slack.Msg{}, nil
+	}
+
+	// If threadTS is empty, this is not a thread
+	if threadTS == "" {
+		return []slack.Msg{}, nil
+	}
+
+	logrus.Debugf("Fetching thread replies for thread %s in channel %s", threadTS, channelID)
+
+	var allReplies []slack.Msg
+	cursor := ""
+	pageCount := 0
+
+	for {
+		pageCount++
+		logrus.Debugf("Fetching thread replies page %d for thread %s (cursor: %s)", pageCount, threadTS, cursor)
+
+		params := slack.GetConversationRepliesParameters{
+			ChannelID: channelID,
+			Timestamp: threadTS,
+			Limit:     200, // Slack API limit
+			Cursor:    cursor,
+		}
+
+		var replies []slack.Message
+		var hasMore bool
+		var nextCursor string
+		var err error
+
+		retryConfig := utils.DefaultRetryConfig()
+		retryConfig.BaseDelay = 1 * time.Second
+		retryConfig.MaxDelay = 5 * time.Minute // Allow longer delays for Slack rate limits
+		retryConfig.MaxRetries = 5             // More retries for Slack API
+
+		err = utils.RetryWithBackoff(ctx, retryConfig, func() error {
+			replies, hasMore, nextCursor, err = s.client.GetConversationReplies(&params)
+			return err
+		})
+
+		if err != nil {
+			logrus.Errorf("Failed to get conversation replies for thread %s after retries: %v", threadTS, err)
+			return nil, fmt.Errorf("failed to get conversation replies after retries: %w", err)
+		}
+
+		logrus.Debugf("API response for thread %s: %d messages, has_more=%v, next_cursor=%s",
+			threadTS, len(replies), hasMore, nextCursor)
+
+		// Skip the first message (it's the parent message itself)
+		// Only include actual replies
+		if len(replies) > 0 {
+			for i, reply := range replies {
+				if i == 0 {
+					// First message is the parent - skip it
+					continue
+				}
+				// Convert slack.Message to slack.Msg
+				allReplies = append(allReplies, reply.Msg)
+			}
+		}
+
+		// Break if no more pages
+		if !hasMore || nextCursor == "" {
+			break
+		}
+
+		cursor = nextCursor
+	}
+
+	logrus.Debugf("Fetched %d replies for thread %s", len(allReplies), threadTS)
+	return allReplies, nil
+}
+
 // convertSlackMessage converts a Slack message to our format
-func (s *SlackAdapter) convertSlackMessage(msg slack.Msg, channelName string) SlackMessage {
+func (s *SlackAdapter) convertSlackMessage(msg slack.Msg, channelName string, replies []slack.Msg) SlackMessage {
 	slackMsg := SlackMessage{
 		Timestamp: msg.Timestamp,
 		User:      msg.User,
@@ -601,7 +720,66 @@ func (s *SlackAdapter) convertSlackMessage(msg slack.Msg, channelName string) Sl
 		}
 	}
 
+	// Convert replies to our format
+	if len(replies) > 0 {
+		for _, reply := range replies {
+			slackMsg.Replies = append(slackMsg.Replies, SlackMessageReply{
+				Timestamp:   reply.Timestamp,
+				User:        reply.User,
+				Text:        reply.Text,
+				Channel:     channelName,
+				ThreadTS:    reply.ThreadTimestamp,
+				Reactions:   s.convertReactions(reply.Reactions),
+				Files:       s.convertFiles(reply.Files),
+				Attachments: s.convertAttachments(reply.Attachments),
+			})
+		}
+	}
+
 	return slackMsg
+}
+
+// convertReactions converts Slack reactions to our format
+func (s *SlackAdapter) convertReactions(reactions []slack.ItemReaction) []SlackReaction {
+	var converted []SlackReaction
+	for _, reaction := range reactions {
+		converted = append(converted, SlackReaction{
+			Name:  reaction.Name,
+			Count: reaction.Count,
+			Users: reaction.Users,
+		})
+	}
+	return converted
+}
+
+// convertFiles converts Slack files to our format
+func (s *SlackAdapter) convertFiles(files []slack.File) []SlackFile {
+	var converted []SlackFile
+	for _, file := range files {
+		converted = append(converted, SlackFile{
+			ID:       file.ID,
+			Name:     file.Name,
+			Title:    file.Title,
+			Mimetype: file.Mimetype,
+			URL:      file.URLPrivate,
+		})
+	}
+	return converted
+}
+
+// convertAttachments converts Slack attachments to our format
+func (s *SlackAdapter) convertAttachments(attachments []slack.Attachment) []SlackAttachment {
+	var converted []SlackAttachment
+	for _, attachment := range attachments {
+		converted = append(converted, SlackAttachment{
+			Title:      attachment.Title,
+			Text:       attachment.Text,
+			Fallback:   attachment.Fallback,
+			Color:      attachment.Color,
+			AuthorName: attachment.AuthorName,
+		})
+	}
+	return converted
 }
 
 // testChannelAccess tests if the bot can access the channel and attempts to join if needed
@@ -785,6 +963,23 @@ func (s *SlackAdapter) messagesToFileContent(messages []SlackMessage, channelNam
 		// Add thread information
 		if msg.ThreadTS != "" {
 			content.WriteString(fmt.Sprintf("**Thread:** %s\n", msg.ThreadTS))
+		}
+
+		// Add replies if they exist
+		if len(msg.Replies) > 0 {
+			content.WriteString("**Replies:**\n")
+			for _, reply := range msg.Replies {
+				replyTime, err := strconv.ParseFloat(reply.Timestamp, 64)
+				if err != nil {
+					logrus.Warnf("Failed to parse reply timestamp %s: %v", reply.Timestamp, err)
+					continue
+				}
+
+				content.WriteString(fmt.Sprintf("  - Reply at %s by %s:\n", time.Unix(int64(replyTime), 0).Format("2006-01-02 15:04:05"), reply.User))
+				if reply.Text != "" {
+					content.WriteString(fmt.Sprintf("    %s\n", reply.Text))
+				}
+			}
 		}
 
 		// Add reactions
