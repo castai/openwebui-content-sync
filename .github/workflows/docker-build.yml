@@ -29,7 +29,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64, linux/arm64
           registry: ghcr.io
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/${{ env.LOWER_REPO }}:latest
